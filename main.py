@@ -34,7 +34,8 @@ if __name__=='__main__':
             ptr = 0
 
         inputs = str2vec(data[ptr:ptr + seq_len])
-        loss, h_prev, c_prev = lstm_block.train(inputs, h_prev, c_prev, learning_rate=5e-3)
+        target = str2vec(data[ptr + 1:ptr + seq_len + 1])
+        loss, h_prev, c_prev = lstm_block.train(inputs, target, h_prev, c_prev, learning_rate=5e-3)
         ptr += seq_len
         
         if epoch % 100 == 0:
