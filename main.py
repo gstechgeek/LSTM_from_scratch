@@ -1,5 +1,6 @@
 import numpy as np
-from lstm import LSTM
+import matplotlib.pyplot as plt
+from lstm_archs import LSTM_Peephole as LSTM
 
 data = open('input.txt', 'r').read()
 chars = list(set(data))
@@ -24,8 +25,14 @@ if __name__=='__main__':
     ptr = 0
     seq_len = 25
     hidden_size = 30
+    smooth_loss = -np.log(1.0 / vocab_size) * seq_len
     lstm_block = LSTM(str_size=vocab_size, hidden_size=hidden_size)
 
+    loss_lst = []
+    smooth_loss_lst = []
+
+    plt.ion()
+    plt.figure(figsize=(10, 5))
     # Train and Sample every 100 steps
     for epoch in range(100000):
         if ptr + seq_len + 1 > len(data) or epoch == 0:
@@ -36,11 +43,29 @@ if __name__=='__main__':
         inputs = str2vec(data[ptr:ptr + seq_len])
         target = str2vec(data[ptr + 1:ptr + seq_len + 1])
         loss, h_prev, c_prev = lstm_block.train(inputs, target, h_prev, c_prev, learning_rate=5e-3)
+        smooth_loss = smooth_loss * 0.999 + loss * 0.001
         ptr += seq_len
+
+        smooth_loss_lst.append(smooth_loss)
+        loss_lst.append(loss)
         
         if epoch % 100 == 0:
-            idx_list = lstm_block.sample(char_to_ix[data[ptr]], h_prev, c_prev, 100)
-            print('----------% Epoch: {}, Loss: {}%------------'.format(epoch, loss))
+            idx_list = lstm_block.sample(char_to_ix[data[ptr]], h_prev, c_prev, 200)
+            print('----------% Epoch: {}, Loss: {}%------------'.format(epoch, smooth_loss))
             print(vec2str(idx_list))
             print()
+
+            plt.plot(loss_lst, label='loss')
+            plt.plot(smooth_loss_lst, label='smooth_loss')
+            plt.title('Loss Graph: Sequence Length: {}'.format(seq_len))
+            plt.xlabel('Num Iterations')
+            plt.ylabel('Loss')
+            plt.legend(loc='upper right') 
+            plt.savefig('lg_sl_{}.png'.format(seq_len))
+
+            plt.draw()
+            plt.pause(1e-5)
+            plt.clf()
+        
+        
     
