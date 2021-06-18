@@ -1,6 +1,8 @@
+import json
 import numpy as np
 import matplotlib.pyplot as plt
-from lstm_archs import LSTM_Peephole as LSTM
+# from lstm_archs import LSTM_Peephole as LSTM
+from lstm_archs import GRU
 
 data = open('input.txt', 'r').read()
 chars = list(set(data))
@@ -26,7 +28,8 @@ if __name__=='__main__':
     seq_len = 25
     hidden_size = 30
     smooth_loss = -np.log(1.0 / vocab_size) * seq_len
-    lstm_block = LSTM(str_size=vocab_size, hidden_size=hidden_size)
+    # lstm_block = LSTM(str_size=vocab_size, hidden_size=hidden_size)
+    gru_block = GRU(str_size=vocab_size, hidden_size=hidden_size)
 
     loss_lst = []
     smooth_loss_lst = []
@@ -37,12 +40,13 @@ if __name__=='__main__':
     for epoch in range(100000):
         if ptr + seq_len + 1 > len(data) or epoch == 0:
             h_prev = np.zeros((hidden_size, 1))
-            c_prev = np.zeros((hidden_size, 1))
+            # c_prev = np.zeros((hidden_size, 1))
             ptr = 0
 
         inputs = str2vec(data[ptr:ptr + seq_len])
         target = str2vec(data[ptr + 1:ptr + seq_len + 1])
-        loss, h_prev, c_prev = lstm_block.train(inputs, target, h_prev, c_prev, learning_rate=5e-3)
+        # 
+        loss, h_prev = gru_block.train(inputs, target, h_prev, learning_rate=5e-3)
         smooth_loss = smooth_loss * 0.999 + loss * 0.001
         ptr += seq_len
 
@@ -50,7 +54,8 @@ if __name__=='__main__':
         loss_lst.append(loss)
         
         if epoch % 100 == 0:
-            idx_list = lstm_block.sample(char_to_ix[data[ptr]], h_prev, c_prev, 200)
+            # idx_list = lstm_block.sample(char_to_ix[data[ptr]], h_prev, c_prev, 200)
+            idx_list = gru_block.sample(char_to_ix[data[ptr]], h_prev, 200)
             print('----------% Epoch: {}, Loss: {}%------------'.format(epoch, smooth_loss))
             print(vec2str(idx_list))
             print()
@@ -66,6 +71,21 @@ if __name__=='__main__':
             plt.draw()
             plt.pause(1e-5)
             plt.clf()
+    
+    # idx_list = lstm_block.sample(char_to_ix[data[ptr]], h_prev, c_prev, 5000)
+    idx_list = gru_block.sample(char_to_ix[data[ptr]], h_prev, 5000)
+    out = vec2str(idx_list)
+
+    with open('gru_output.txt', 'w') as f:
+        f.write(out)
+    # init_params = {'vocab_size': vocab_size, 'hidden_size': hidden_size}
+    # weight_dict = {k: v.tolist() for k, v in lstm_block.param.items()}
+
+    # save_dict = {'init': init_params, 'weights': weight_dict}
+
+    # with open('init_weights_peephole.json', 'w') as outfile:
+    #     json.dump(save_dict, outfile)
+    # print("Weights saved.")
         
         
     

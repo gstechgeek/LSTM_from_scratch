@@ -58,8 +58,8 @@ class LSTM:
             y_t[i] = self.param['Wy'] @ h_t[i] + self.param['by']    # Output
             p_t[i] = softmax(y_t[i])
             loss += loss_func(p_t[i], target[i])
-        h_prev = h_t[len(inputs) - 2]
-        c_prev = c_t[len(inputs) - 2]
+        h_prev = h_t[len(inputs) - 1]
+        c_prev = c_t[len(inputs) - 1]
         
         # Backward Pass
         for t in reversed(range(1, len(inputs))):
@@ -216,6 +216,95 @@ class LSTM_Peephole(LSTM):
             c_t = c_t * f_t + i_t * c_
             o_t = sig(self.param['Wo'] @ np.concatenate((c_t, h_t, x)) + self.param['bo'])
             h_t = o_t * tanh(c_t)
+            y_t = self.param['Wy'] @ h_t + self.param['by']
+            p_t = softmax(y_t)
+            ix = np.random.choice(range(self.str_size), p=p_t.ravel())
+            x = np.zeros((self.str_size, 1))
+            x[ix] = 1
+            idx_list.append(ix)
+        return idx_list
+
+class GRU:
+    def __init__(self, str_size, hidden_size):
+        self.str_size = str_size
+        self.hidden_size = hidden_size
+
+        self.param = {}
+        self.param['Wz'] = np.random.randn(hidden_size, str_size) / 100
+        self.param['Uz'] = np.random.randn(hidden_size, hidden_size) / 100
+        self.param['bz'] = np.zeros((hidden_size, 1))
+
+        self.param['Wr'] = np.random.randn(hidden_size, str_size) / 100
+        self.param['Ur'] = np.random.randn(hidden_size, hidden_size)/ 100
+        self.param['br'] = np.zeros((hidden_size, 1))
+
+        self.param['Wh'] = np.random.randn(hidden_size, str_size) / 100
+        self.param['Uh'] = np.random.randn(hidden_size, hidden_size)/ 100
+        self.param['bh'] = np.zeros((hidden_size, 1))
+
+        self.param['Wy'] = np.random.randn(str_size, hidden_size) / 100
+        self.param['by'] = np.zeros((str_size, 1))
+
+    def train(self, inputs, target, h_prev, learning_rate=0.0001):
+        z_t, r_t, h_= {}, {}, {}
+        h_t, y_t, p_t = {}, {}, {}
+        h_t[-1] = h_prev
+        loss = 0
+
+        grad = {}
+        for p in self.param:
+            grad[p] = np.zeros_like(self.param[p])
+
+        for i in range(len(inputs)):
+            z_t[i] = sig(self.param['Wz'] @ inputs[i] + self.param['Uz'] @ h_t[i - 1] + self.param['bz'])
+            r_t[i] = sig(self.param['Wr'] @ inputs[i] + self.param['Ur'] @ h_t[i - 1] + self.param['br'])
+            h_[i]  = tanh(self.param['Wh'] @ inputs[i] + self.param['Uh'] @ (r_t[i] * h_t[i - 1]) + self.param['bh'])
+            h_t[i] = (1 - z_t[i]) * h_t[i - 1] + z_t[i] * h_[i]
+            y_t[i] = self.param['Wy'] @ h_t[i] + self.param['by']    # Output
+            p_t[i] = softmax(y_t[i])
+            loss += loss_func(p_t[i], target[i])
+        h_prev = h_t[len(inputs) - 1]
+
+        for t in reversed(range(1, len(inputs))):
+            d_Y = p_t[t] - target[t]
+            d_ht = self.param['Wy'].T @ d_Y
+            
+            grad['Wy'] += d_Y @ h_t[t].T
+            grad['by'] += d_Y
+
+            grad['Wh'] += (d_ht * z_t[t] * (1 - h_[t] ** 2)) @ inputs[t].T
+            grad['Uh'] += (d_ht * z_t[t] * (1 - h_[t] ** 2)) @ (r_t[t] * h_t[t - 1]).T
+            grad['bh'] += (d_ht * z_t[t] * (1 - h_[t] ** 2))
+
+            grad['Wr'] += (d_ht * z_t[t] * (1 - h_[t] ** 2) * (self.param['Uh'] @ h_t[t - 1]) * r_t[t] * (1 - r_t[t])) @ inputs[t].T
+            grad['Ur'] += (d_ht * z_t[t] * (1 - h_[t] ** 2) * (self.param['Uh'] @ h_t[t - 1]) * r_t[t] * (1 - r_t[t])) @ h_t[t - 1].T
+            grad['br'] += (d_ht * z_t[t] * (1 - h_[t] ** 2) * (self.param['Uh'] @ h_t[t - 1]) * r_t[t] * (1 - r_t[t]))
+
+            grad['Wz'] += (d_ht * (h_[t] - h_t[t - 1]) * z_t[t] * (1 - z_t[t])) @ inputs[t].T
+            grad['Uz'] += (d_ht * (h_[t] - h_t[t - 1]) * z_t[t] * (1 - z_t[t])) @ h_t[t - 1].T
+            grad['bz'] += (d_ht * (h_[t] - h_t[t - 1]) * z_t[t] * (1 - z_t[t]))
+        
+        # Mitigating exploding gradients issue
+        for dparam in grad:
+            np.clip(grad[dparam], -5, 5, out=grad[dparam])
+        
+        # Optimizer step
+        for dparam in grad:
+            self.param[dparam] -= learning_rate * grad[dparam]
+        
+        return loss, h_prev
+
+
+    def sample(self, seed_idx, h_prev, seq_len):
+        x = np.zeros((self.str_size, 1))
+        x[seed_idx] = 1
+        idx_list = []
+        h_t = h_prev
+        for _ in range(seq_len):
+            z_t = sig(self.param['Wz'] @ x + self.param['Uz'] @ h_t + self.param['bz'])
+            r_t = sig(self.param['Wr'] @ x + self.param['Ur'] @ h_t + self.param['br'])
+            h_ = tanh(self.param['Wh'] @ x + self.param['Uh'] @ (r_t * h_t) + self.param['bh'])
+            h_t = (1 - z_t) * h_t + z_t * h_
             y_t = self.param['Wy'] @ h_t + self.param['by']
             p_t = softmax(y_t)
             ix = np.random.choice(range(self.str_size), p=p_t.ravel())

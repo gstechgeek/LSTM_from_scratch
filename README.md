@@ -7,6 +7,7 @@ sequences trained on a Shakespeare play.
 Variants Implemented:
 * Classic LSTM
 * LSTM with peephole connections
+* Gated Recurrent Unit
 
 To train architecture :
 ```
